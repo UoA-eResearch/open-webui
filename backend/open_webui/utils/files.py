@@ -245,7 +245,8 @@ async def get_pdf_page_images(file_id: str, dpi: int = 150, max_pages: int = 50)
     Args:
         file_id: The Open WebUI file ID (UUID string).
         dpi: Resolution used for rendering (default 150 DPI).
-        max_pages: Maximum number of pages to render (0 = all pages).
+        max_pages: Maximum number of pages to render.  Defaults to 50.
+            Set to 0 to render all pages with no limit.
     """
     try:
         import fitz  # pymupdf
