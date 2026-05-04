@@ -469,6 +469,16 @@
 		(model) => $models.find((m) => m.id === model)?.info?.meta?.capabilities?.vision ?? true
 	);
 
+	let audioCapableModels = [];
+	$: audioCapableModels = (atSelectedModel?.id ? [atSelectedModel.id] : selectedModels).filter(
+		(model) => $models.find((m) => m.id === model)?.info?.meta?.capabilities?.audio ?? false
+	);
+
+	let videoCapableModels = [];
+	$: videoCapableModels = (atSelectedModel?.id ? [atSelectedModel.id] : selectedModels).filter(
+		(model) => $models.find((m) => m.id === model)?.info?.meta?.capabilities?.video ?? false
+	);
+
 	let fileUploadCapableModels = [];
 	$: fileUploadCapableModels = (atSelectedModel?.id ? [atSelectedModel.id] : selectedModels).filter(
 		(model) => $models.find((m) => m.id === model)?.info?.meta?.capabilities?.file_upload ?? true
@@ -665,6 +675,37 @@
 			}
 		} else {
 			// If temporary chat is enabled, we just add the file to the list without uploading it.
+
+			// For audio/video files with capable models, store as data URL for direct injection.
+			if (
+				file.type.startsWith('audio/') && audioCapableModels.length > 0
+			) {
+				const reader = new FileReader();
+				reader.onload = (event) => {
+					fileItem.status = 'uploaded';
+					fileItem.type = 'file';
+					fileItem.content_type = file.type;
+					fileItem.url = event.target?.result as string;
+					fileItem.id = uuidv4();
+					files = files;
+				};
+				reader.readAsDataURL(file);
+				return fileItem;
+			} else if (
+				file.type.startsWith('video/') && videoCapableModels.length > 0
+			) {
+				const reader = new FileReader();
+				reader.onload = (event) => {
+					fileItem.status = 'uploaded';
+					fileItem.type = 'file';
+					fileItem.content_type = file.type;
+					fileItem.url = event.target?.result as string;
+					fileItem.id = uuidv4();
+					files = files;
+				};
+				reader.readAsDataURL(file);
+				return fileItem;
+			}
 
 			const content = await extractContentFromFile(file).catch((error) => {
 				toast.error(

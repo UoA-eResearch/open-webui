@@ -11,6 +11,14 @@
 			label: $i18n.t('Vision'),
 			description: $i18n.t('Model accepts image inputs')
 		},
+		audio: {
+			label: $i18n.t('Audio'),
+			description: $i18n.t('Model accepts audio inputs directly (bypasses speech-to-text transcription)')
+		},
+		video: {
+			label: $i18n.t('Video'),
+			description: $i18n.t('Model accepts video inputs directly')
+		},
 		file_upload: {
 			label: $i18n.t('File Upload'),
 			description: $i18n.t('Model accepts file inputs')
@@ -62,6 +70,8 @@
 	export let capabilities: {
 		file_context?: boolean;
 		vision?: boolean;
+		audio?: boolean;
+		video?: boolean;
 		file_upload?: boolean;
 		web_search?: boolean;
 		image_generation?: boolean;
@@ -73,9 +83,9 @@
 		builtin_tools?: boolean;
 	} = {};
 
-	// Hide file_context when file_upload is disabled
+	// Hide file_context/audio/video when file_upload is disabled
 	$: visibleCapabilities = Object.keys(capabilityLabels).filter((cap) => {
-		if (cap === 'file_context' && !capabilities.file_upload) {
+		if ((cap === 'file_context' || cap === 'audio' || cap === 'video') && !capabilities.file_upload) {
 			return false;
 		}
 		return true;

@@ -143,7 +143,13 @@ async def process_uploaded_file(
                         db=db_session,
                     )
                 else:
-                    raise Exception(f'File type {content_type} is not supported for processing')
+                    # image/* and video/* files are stored as-is for direct multimodal injection;
+                    # mark them as complete so callers don't treat them as failed uploads.
+                    await Files.update_file_data_by_id(
+                        file_item.id,
+                        {'status': 'complete'},
+                        db=db_session,
+                    )
             else:
                 log.info(f'File type {file.content_type} is not provided, but trying to process anyway')
                 await process_file(

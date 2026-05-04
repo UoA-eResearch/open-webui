@@ -211,3 +211,84 @@ async def get_image_base64_from_file_id(id: str) -> Optional[str]:
             return None
     except Exception as e:
         return None
+
+
+async def get_media_base64_from_file_id(id: str) -> Optional[str]:
+    """Get any file as a base64 data URL (used for audio/video direct injection)."""
+    file = await Files.get_file_by_id(id)
+    if not file:
+        return None
+
+    try:
+        file_path = await asyncio.to_thread(Storage.get_file, file.path)
+        file_path = Path(file_path)
+
+        if file_path.is_file():
+            with open(file_path, 'rb') as f:
+                encoded_string = base64.b64encode(f.read()).decode('utf-8')
+            content_type = (file.meta or {}).get('content_type') or mimetypes.guess_type(file_path.name)[0]
+            if not content_type:
+                return None
+            return f'data:{content_type};base64,{encoded_string}'
+        else:
+            return None
+    except Exception as e:
+        return None
+
+
+async def get_pdf_page_images(file_id: str, dpi: int = 150, max_pages: int = 50) -> list[str]:
+    """Render PDF pages as base64 PNG data URLs using pymupdf (fitz).
+
+    Each returned string is a ``data:image/png;base64,...`` data URL suitable
+    for use as an ``image_url`` content item in an OpenAI-compatible request.
+
+    Args:
+        file_id: The Open WebUI file ID (UUID string).
+        dpi: Resolution used for rendering (default 150 DPI).
+        max_pages: Maximum number of pages to render (0 = all pages).
+    """
+    try:
+        import fitz  # pymupdf
+    except ImportError:
+        import logging as _log
+        _log.getLogger(__name__).warning(
+            'pymupdf is not installed; cannot render PDF pages as images. '
+            'Install it with: pip install pymupdf'
+        )
+        return []
+
+    file = await Files.get_file_by_id(file_id)
+    if not file:
+        return []
+
+    try:
+        file_path = await asyncio.to_thread(Storage.get_file, file.path)
+        file_path = Path(file_path)
+
+        if not file_path.is_file():
+            return []
+
+        zoom = dpi / 72.0
+        matrix = fitz.Matrix(zoom, zoom)
+
+        def _render_pages():
+            doc = fitz.open(str(file_path))
+            try:
+                n = len(doc)
+                limit = n if (max_pages <= 0) else min(n, max_pages)
+                pages = []
+                for i in range(limit):
+                    pix = doc.load_page(i).get_pixmap(matrix=matrix)
+                    img_bytes = pix.tobytes('png')
+                    b64 = base64.b64encode(img_bytes).decode('utf-8')
+                    pages.append(f'data:image/png;base64,{b64}')
+                return pages
+            finally:
+                doc.close()
+
+        return await asyncio.to_thread(_render_pages)
+    except Exception as e:
+        import logging as _log
+        _log.getLogger(__name__).error(f'Error rendering PDF pages for file {file_id}: {e}')
+        return []
+
