@@ -8,6 +8,7 @@ on:
       - dev
     tags:
       - v*
+  pull_request:
 
 env:
   REGISTRY: ghcr.io
