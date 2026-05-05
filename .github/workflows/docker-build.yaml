@@ -80,6 +80,7 @@ jobs:
           images: ${{ env.FULL_IMAGE_NAME }}
           tags: |
             type=ref,event=branch
+            type=ref,event=pr
             ${{ github.ref_type == 'tag' && 'type=raw,value=main' || '' }}
           flavor: |
             prefix=cache-${{ matrix.platform }}-
@@ -185,6 +186,7 @@ jobs:
           images: ${{ env.FULL_IMAGE_NAME }}
           tags: |
             type=ref,event=branch
+            type=ref,event=pr
             ${{ github.ref_type == 'tag' && 'type=raw,value=main' || '' }}
           flavor: |
             prefix=cache-cuda-${{ matrix.platform }}-
@@ -291,6 +293,7 @@ jobs:
           images: ${{ env.FULL_IMAGE_NAME }}
           tags: |
             type=ref,event=branch
+            type=ref,event=pr
             ${{ github.ref_type == 'tag' && 'type=raw,value=main' || '' }}
           flavor: |
             prefix=cache-cuda126-${{ matrix.platform }}-
@@ -395,6 +398,7 @@ jobs:
           images: ${{ env.FULL_IMAGE_NAME }}
           tags: |
             type=ref,event=branch
+            type=ref,event=pr
             ${{ github.ref_type == 'tag' && 'type=raw,value=main' || '' }}
           flavor: |
             prefix=cache-ollama-${{ matrix.platform }}-
@@ -498,6 +502,7 @@ jobs:
           images: ${{ env.FULL_IMAGE_NAME }}
           tags: |
             type=ref,event=branch
+            type=ref,event=pr
             ${{ github.ref_type == 'tag' && 'type=raw,value=main' || '' }}
           flavor: |
             prefix=cache-slim-${{ matrix.platform }}-
