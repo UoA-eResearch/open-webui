@@ -631,10 +631,21 @@
 
 		if (!$temporaryChatEnabled) {
 			try {
-				// If the file is an audio file, provide the language for STT.
+				// For audio-/video-capable models, skip server-side STT/RAG processing so the
+				// raw file is injected directly as an audio_url / video_url content item.
+				const isAudioForCapableModel =
+					file.type.startsWith('audio/') && audioCapableModels.length > 0;
+				const isVideoForCapableModel =
+					file.type.startsWith('video/') && videoCapableModels.length > 0;
+				if (isAudioForCapableModel || isVideoForCapableModel) {
+					process = false;
+				}
+
+				// If the file is an audio/video file that will go through STT, provide the language.
 				let metadata = null;
 				if (
-					(file.type.startsWith('audio/') || file.type.startsWith('video/')) &&
+					((file.type.startsWith('audio/') && !isAudioForCapableModel) ||
+						(file.type.startsWith('video/') && !isVideoForCapableModel)) &&
 					$settings?.audio?.stt?.language
 				) {
 					metadata = {
