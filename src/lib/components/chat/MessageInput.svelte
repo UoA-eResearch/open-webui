@@ -1277,6 +1277,10 @@
 									// Model supports direct audio input: attach the audio file
 									await uploadFileHandler(data.file);
 									document.getElementById('chat-input')?.focus();
+
+									if ($settings?.speechAutoSend ?? false) {
+										dispatch('submit', prompt);
+									}
 								} else {
 									const { text } = data;
 									await insertTextAtCursor(`${text}`);
