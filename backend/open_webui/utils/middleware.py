@@ -2325,7 +2325,7 @@ async def process_chat_payload(request, form_data, user, metadata, model):
             form_data['messages'] = [system_message, *db_messages] if system_message else db_messages
 
             # Determine which media types this model supports natively.
-            model_caps = (model.get('info', {}).get('meta', {}).get('capabilities') or {})
+            model_caps = model.get('info', {}).get('meta', {}).get('capabilities') or {}
             model_vision = model_caps.get('vision', True)
             model_audio = model_caps.get('audio', False)
             model_video = model_caps.get('video', False)

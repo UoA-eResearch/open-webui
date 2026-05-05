@@ -217,7 +217,6 @@ async def get_image_base64_from_file_id(id: str) -> Optional[str]:
         return None
 
 
-
 # Maximum file size allowed for base64 media encoding (50 MB).
 # Larger files are skipped to avoid event-loop blocking and oversized LLM requests.
 _MEDIA_BASE64_MAX_BYTES = 50 * 1024 * 1024
@@ -229,9 +228,7 @@ _PDF_PAGE_CACHE: OrderedDict[tuple[str, int, int], list[str]] = OrderedDict()
 _PDF_PAGE_CACHE_MAXSIZE = 128
 
 
-async def get_media_base64_from_file_id(
-    id: str, user_id: Optional[str] = None
-) -> Optional[str]:
+async def get_media_base64_from_file_id(id: str, user_id: Optional[str] = None) -> Optional[str]:
     """Get any file as a base64 data URL (used for audio/video direct injection).
 
     Args:
@@ -302,10 +299,7 @@ async def get_pdf_page_images(
     try:
         import fitz  # pymupdf
     except ImportError:
-        log.warning(
-            'pymupdf is not installed; cannot render PDF pages as images. '
-            'Install it with: pip install pymupdf'
-        )
+        log.warning('pymupdf is not installed; cannot render PDF pages as images. Install it with: pip install pymupdf')
         return []
 
     if user_id is not None:
@@ -350,4 +344,3 @@ async def get_pdf_page_images(
     except Exception as e:
         log.error(f'Error rendering PDF pages for file {file_id}: {e}')
         return []
-
