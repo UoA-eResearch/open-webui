@@ -26,6 +26,7 @@ import mimetypes
 import base64
 import io
 import re
+from collections import OrderedDict
 
 from open_webui.env import AIOHTTP_CLIENT_SESSION_SSL, ENABLE_IMAGE_CONTENT_TYPE_EXTENSION_FALLBACK
 from open_webui.utils.session_pool import get_session
@@ -221,10 +222,10 @@ async def get_image_base64_from_file_id(id: str) -> Optional[str]:
 # Larger files are skipped to avoid event-loop blocking and oversized LLM requests.
 _MEDIA_BASE64_MAX_BYTES = 50 * 1024 * 1024
 
-# In-memory cache for rendered PDF pages, keyed by (file_id, dpi, max_pages).
+# In-memory LRU cache for rendered PDF pages, keyed by (file_id, dpi, max_pages).
 # Files are immutable once uploaded, so no cache invalidation is required.
 # Limited to 128 entries to cap memory use.
-_PDF_PAGE_CACHE: dict[tuple[str, int, int], list[str]] = {}
+_PDF_PAGE_CACHE: OrderedDict[tuple[str, int, int], list[str]] = OrderedDict()
 _PDF_PAGE_CACHE_MAXSIZE = 128
 
 
@@ -294,6 +295,8 @@ async def get_pdf_page_images(
     """
     cache_key = (file_id, dpi, max_pages)
     if cache_key in _PDF_PAGE_CACHE:
+        # Move accessed entry to the end (most-recently-used position).
+        _PDF_PAGE_CACHE.move_to_end(cache_key)
         return _PDF_PAGE_CACHE[cache_key]
 
     try:
@@ -339,9 +342,9 @@ async def get_pdf_page_images(
 
         pages = await asyncio.to_thread(_render_pages)
 
-        # Populate cache; evict the oldest entry when the cache is full.
+        # Populate cache; evict the least-recently-used entry when full.
         if len(_PDF_PAGE_CACHE) >= _PDF_PAGE_CACHE_MAXSIZE:
-            _PDF_PAGE_CACHE.pop(next(iter(_PDF_PAGE_CACHE)))
+            _PDF_PAGE_CACHE.popitem(last=False)  # evict oldest (LRU) entry
         _PDF_PAGE_CACHE[cache_key] = pages
         return pages
     except Exception as e:
