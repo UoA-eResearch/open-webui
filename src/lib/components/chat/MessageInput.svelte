@@ -631,12 +631,40 @@
 
 		if (!$temporaryChatEnabled) {
 			try {
-				// For audio-/video-capable models, skip server-side STT/RAG processing so the
-				// raw file is injected directly as an audio_url / video_url content item.
+				// Safe video MIME types that are genuine media files.
+				// 'video/mp2t' is excluded because browsers can mis-label TypeScript
+				// (.ts) files with that MIME type; those should still be RAG-processed.
+				const SAFE_VIDEO_MIME_TYPES = new Set([
+					'video/mp4',
+					'video/webm',
+					'video/ogg',
+					'video/quicktime',
+					'video/x-msvideo',
+					'video/x-matroska',
+					'video/3gpp',
+					'video/3gpp2',
+					'video/mpeg',
+					'video/x-ms-wmv',
+					'video/x-flv',
+					'video/x-m4v'
+				]);
+
+				// Effective model count: when @-mentioning a model, only that one is
+				// relevant; otherwise all selected models must support the media type.
+				const effectiveModelCount = atSelectedModel?.id ? 1 : selectedModels.length;
+
+				// Only skip server-side STT/RAG processing when ALL effective models
+				// natively support the media type, so non-capable models still receive
+				// transcribed text / extracted content.
 				const isAudioForCapableModel =
-					file.type.startsWith('audio/') && audioCapableModels.length > 0;
+					file.type.startsWith('audio/') &&
+					audioCapableModels.length > 0 &&
+					audioCapableModels.length === effectiveModelCount;
 				const isVideoForCapableModel =
-					file.type.startsWith('video/') && videoCapableModels.length > 0;
+					file.type.startsWith('video/') &&
+					SAFE_VIDEO_MIME_TYPES.has(file.type) &&
+					videoCapableModels.length > 0 &&
+					videoCapableModels.length === effectiveModelCount;
 				if (isAudioForCapableModel || isVideoForCapableModel) {
 					process = false;
 				}
@@ -688,8 +716,17 @@
 			// If temporary chat is enabled, we just add the file to the list without uploading it.
 
 			// For audio/video files with capable models, store as data URL for direct injection.
+			// Only use native injection when ALL effective models support the media type.
+			const effectiveModelCount = atSelectedModel?.id ? 1 : selectedModels.length;
+			const SAFE_VIDEO_MIME_TYPES_TEMP = new Set([
+				'video/mp4', 'video/webm', 'video/ogg', 'video/quicktime',
+				'video/x-msvideo', 'video/x-matroska', 'video/3gpp', 'video/3gpp2',
+				'video/mpeg', 'video/x-ms-wmv', 'video/x-flv', 'video/x-m4v'
+			]);
 			if (
-				file.type.startsWith('audio/') && audioCapableModels.length > 0
+				file.type.startsWith('audio/') &&
+				audioCapableModels.length > 0 &&
+				audioCapableModels.length === effectiveModelCount
 			) {
 				const reader = new FileReader();
 				reader.onload = (event) => {
@@ -703,7 +740,10 @@
 				reader.readAsDataURL(file);
 				return fileItem;
 			} else if (
-				file.type.startsWith('video/') && videoCapableModels.length > 0
+				file.type.startsWith('video/') &&
+				SAFE_VIDEO_MIME_TYPES_TEMP.has(file.type) &&
+				videoCapableModels.length > 0 &&
+				videoCapableModels.length === effectiveModelCount
 			) {
 				const reader = new FileReader();
 				reader.onload = (event) => {
@@ -1273,7 +1313,9 @@
 					<div class={recording ? '' : 'hidden'}>
 						<VoiceRecording
 							bind:recording
-							transcribe={audioCapableModels.length === 0}
+							transcribe={audioCapableModels.length === 0 ||
+							audioCapableModels.length !==
+								(atSelectedModel?.id ? 1 : selectedModels.length)}
 							onCancel={async () => {
 								recording = false;
 
