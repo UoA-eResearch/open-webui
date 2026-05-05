@@ -1262,6 +1262,7 @@
 					<div class={recording ? '' : 'hidden'}>
 						<VoiceRecording
 							bind:recording
+							transcribe={audioCapableModels.length === 0}
 							onCancel={async () => {
 								recording = false;
 
@@ -1269,17 +1270,22 @@
 								document.getElementById('chat-input')?.focus();
 							}}
 							onConfirm={async (data) => {
-								const { text, filename } = data;
-
 								recording = false;
-
 								await tick();
-								await insertTextAtCursor(`${text}`);
-								await tick();
-								document.getElementById('chat-input')?.focus();
 
-								if ($settings?.speechAutoSend ?? false) {
-									dispatch('submit', prompt);
+								if (data?.file) {
+									// Model supports direct audio input: attach the audio file
+									await uploadFileHandler(data.file);
+									document.getElementById('chat-input')?.focus();
+								} else {
+									const { text } = data;
+									await insertTextAtCursor(`${text}`);
+									await tick();
+									document.getElementById('chat-input')?.focus();
+
+									if ($settings?.speechAutoSend ?? false) {
+										dispatch('submit', prompt);
+									}
 								}
 							}}
 						/>
