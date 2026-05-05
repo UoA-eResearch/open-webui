@@ -116,6 +116,23 @@
 	export let atSelectedModel: Model | undefined = undefined;
 	export let selectedModels: [''];
 
+	// Safe video MIME types for native injection bypass.
+	// 'video/mp2t' is excluded: browsers assign it to TypeScript (.ts) files.
+	const SAFE_VIDEO_MIME_TYPES = new Set([
+		'video/mp4',
+		'video/webm',
+		'video/ogg',
+		'video/quicktime',
+		'video/x-msvideo',
+		'video/x-matroska',
+		'video/3gpp',
+		'video/3gpp2',
+		'video/mpeg',
+		'video/x-ms-wmv',
+		'video/x-flv',
+		'video/x-m4v'
+	]);
+
 	let selectedModelIds = [];
 	$: selectedModelIds = atSelectedModel !== undefined ? [atSelectedModel.id] : selectedModels;
 
@@ -631,24 +648,6 @@
 
 		if (!$temporaryChatEnabled) {
 			try {
-				// Safe video MIME types that are genuine media files.
-				// 'video/mp2t' is excluded because browsers can mis-label TypeScript
-				// (.ts) files with that MIME type; those should still be RAG-processed.
-				const SAFE_VIDEO_MIME_TYPES = new Set([
-					'video/mp4',
-					'video/webm',
-					'video/ogg',
-					'video/quicktime',
-					'video/x-msvideo',
-					'video/x-matroska',
-					'video/3gpp',
-					'video/3gpp2',
-					'video/mpeg',
-					'video/x-ms-wmv',
-					'video/x-flv',
-					'video/x-m4v'
-				]);
-
 				// Effective model count: when @-mentioning a model, only that one is
 				// relevant; otherwise all selected models must support the media type.
 				const effectiveModelCount = atSelectedModel?.id ? 1 : selectedModels.length;
@@ -718,11 +717,6 @@
 			// For audio/video files with capable models, store as data URL for direct injection.
 			// Only use native injection when ALL effective models support the media type.
 			const effectiveModelCount = atSelectedModel?.id ? 1 : selectedModels.length;
-			const SAFE_VIDEO_MIME_TYPES_TEMP = new Set([
-				'video/mp4', 'video/webm', 'video/ogg', 'video/quicktime',
-				'video/x-msvideo', 'video/x-matroska', 'video/3gpp', 'video/3gpp2',
-				'video/mpeg', 'video/x-ms-wmv', 'video/x-flv', 'video/x-m4v'
-			]);
 			if (
 				file.type.startsWith('audio/') &&
 				audioCapableModels.length > 0 &&
@@ -741,7 +735,7 @@
 				return fileItem;
 			} else if (
 				file.type.startsWith('video/') &&
-				SAFE_VIDEO_MIME_TYPES_TEMP.has(file.type) &&
+				SAFE_VIDEO_MIME_TYPES.has(file.type) &&
 				videoCapableModels.length > 0 &&
 				videoCapableModels.length === effectiveModelCount
 			) {

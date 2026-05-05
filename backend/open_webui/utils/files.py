@@ -21,6 +21,7 @@ from open_webui.routers.files import upload_file_handler
 from open_webui.retrieval.web.utils import validate_url
 
 import asyncio
+import logging
 import mimetypes
 import base64
 import io
@@ -28,6 +29,8 @@ import re
 
 from open_webui.env import AIOHTTP_CLIENT_SESSION_SSL, ENABLE_IMAGE_CONTENT_TYPE_EXTENSION_FALLBACK
 from open_webui.utils.session_pool import get_session
+
+log = logging.getLogger(__name__)
 
 BASE64_IMAGE_URL_PREFIX = re.compile(r'data:image/\w+;base64,', re.IGNORECASE)
 MARKDOWN_IMAGE_URL_PATTERN = re.compile(r'!\[(.*?)\]\((.+?)\)', re.IGNORECASE)
@@ -221,7 +224,7 @@ _MEDIA_BASE64_MAX_BYTES = 50 * 1024 * 1024
 # In-memory cache for rendered PDF pages, keyed by (file_id, dpi, max_pages).
 # Files are immutable once uploaded, so no cache invalidation is required.
 # Limited to 128 entries to cap memory use.
-_PDF_PAGE_CACHE: dict[tuple, list[str]] = {}
+_PDF_PAGE_CACHE: dict[tuple[str, int, int], list[str]] = {}
 _PDF_PAGE_CACHE_MAXSIZE = 128
 
 
@@ -251,8 +254,7 @@ async def get_media_base64_from_file_id(
 
         file_size = file_path.stat().st_size
         if file_size > _MEDIA_BASE64_MAX_BYTES:
-            import logging as _log
-            _log.getLogger(__name__).warning(
+            log.warning(
                 f'File {id} is {file_size} bytes, exceeds {_MEDIA_BASE64_MAX_BYTES}-byte '
                 'limit for base64 media encoding; skipping.'
             )
@@ -297,8 +299,7 @@ async def get_pdf_page_images(
     try:
         import fitz  # pymupdf
     except ImportError:
-        import logging as _log
-        _log.getLogger(__name__).warning(
+        log.warning(
             'pymupdf is not installed; cannot render PDF pages as images. '
             'Install it with: pip install pymupdf'
         )
@@ -344,7 +345,6 @@ async def get_pdf_page_images(
         _PDF_PAGE_CACHE[cache_key] = pages
         return pages
     except Exception as e:
-        import logging as _log
-        _log.getLogger(__name__).error(f'Error rendering PDF pages for file {file_id}: {e}')
+        log.error(f'Error rendering PDF pages for file {file_id}: {e}')
         return []
 
