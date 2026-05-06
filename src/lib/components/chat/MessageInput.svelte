@@ -116,6 +116,23 @@
 	export let atSelectedModel: Model | undefined = undefined;
 	export let selectedModels: [''];
 
+	// Safe video MIME types for native injection bypass.
+	// 'video/mp2t' is excluded: browsers assign it to TypeScript (.ts) files.
+	const SAFE_VIDEO_MIME_TYPES = new Set([
+		'video/mp4',
+		'video/webm',
+		'video/ogg',
+		'video/quicktime',
+		'video/x-msvideo',
+		'video/x-matroska',
+		'video/3gpp',
+		'video/3gpp2',
+		'video/mpeg',
+		'video/x-ms-wmv',
+		'video/x-flv',
+		'video/x-m4v'
+	]);
+
 	let selectedModelIds = [];
 	$: selectedModelIds = atSelectedModel !== undefined ? [atSelectedModel.id] : selectedModels;
 
@@ -469,6 +486,16 @@
 		(model) => $models.find((m) => m.id === model)?.info?.meta?.capabilities?.vision ?? true
 	);
 
+	let audioCapableModels = [];
+	$: audioCapableModels = (atSelectedModel?.id ? [atSelectedModel.id] : selectedModels).filter(
+		(model) => $models.find((m) => m.id === model)?.info?.meta?.capabilities?.audio ?? false
+	);
+
+	let videoCapableModels = [];
+	$: videoCapableModels = (atSelectedModel?.id ? [atSelectedModel.id] : selectedModels).filter(
+		(model) => $models.find((m) => m.id === model)?.info?.meta?.capabilities?.video ?? false
+	);
+
 	let fileUploadCapableModels = [];
 	$: fileUploadCapableModels = (atSelectedModel?.id ? [atSelectedModel.id] : selectedModels).filter(
 		(model) => $models.find((m) => m.id === model)?.info?.meta?.capabilities?.file_upload ?? true
@@ -621,10 +648,31 @@
 
 		if (!$temporaryChatEnabled) {
 			try {
-				// If the file is an audio file, provide the language for STT.
+				// Effective model count: when @-mentioning a model, only that one is
+				// relevant; otherwise all selected models must support the media type.
+				const effectiveModelCount = atSelectedModel?.id ? 1 : selectedModels.length;
+
+				// Only skip server-side STT/RAG processing when ALL effective models
+				// natively support the media type, so non-capable models still receive
+				// transcribed text / extracted content.
+				const isAudioForCapableModel =
+					file.type.startsWith('audio/') &&
+					audioCapableModels.length > 0 &&
+					audioCapableModels.length === effectiveModelCount;
+				const isVideoForCapableModel =
+					file.type.startsWith('video/') &&
+					SAFE_VIDEO_MIME_TYPES.has(file.type) &&
+					videoCapableModels.length > 0 &&
+					videoCapableModels.length === effectiveModelCount;
+				if (isAudioForCapableModel || isVideoForCapableModel) {
+					process = false;
+				}
+
+				// If the file is an audio/video file that will go through STT, provide the language.
 				let metadata = null;
 				if (
-					(file.type.startsWith('audio/') || file.type.startsWith('video/')) &&
+					((file.type.startsWith('audio/') && !isAudioForCapableModel) ||
+						(file.type.startsWith('video/') && !isVideoForCapableModel)) &&
 					$settings?.audio?.stt?.language
 				) {
 					metadata = {
@@ -665,6 +713,44 @@
 			}
 		} else {
 			// If temporary chat is enabled, we just add the file to the list without uploading it.
+
+			// For audio/video files with capable models, store as data URL for direct injection.
+			// Only use native injection when ALL effective models support the media type.
+			const effectiveModelCount = atSelectedModel?.id ? 1 : selectedModels.length;
+			if (
+				file.type.startsWith('audio/') &&
+				audioCapableModels.length > 0 &&
+				audioCapableModels.length === effectiveModelCount
+			) {
+				const reader = new FileReader();
+				reader.onload = (event) => {
+					fileItem.status = 'uploaded';
+					fileItem.type = 'file';
+					fileItem.content_type = file.type;
+					fileItem.url = event.target?.result as string;
+					fileItem.id = uuidv4();
+					files = files;
+				};
+				reader.readAsDataURL(file);
+				return fileItem;
+			} else if (
+				file.type.startsWith('video/') &&
+				SAFE_VIDEO_MIME_TYPES.has(file.type) &&
+				videoCapableModels.length > 0 &&
+				videoCapableModels.length === effectiveModelCount
+			) {
+				const reader = new FileReader();
+				reader.onload = (event) => {
+					fileItem.status = 'uploaded';
+					fileItem.type = 'file';
+					fileItem.content_type = file.type;
+					fileItem.url = event.target?.result as string;
+					fileItem.id = uuidv4();
+					files = files;
+				};
+				reader.readAsDataURL(file);
+				return fileItem;
+			}
 
 			const content = await extractContentFromFile(file).catch((error) => {
 				toast.error(
@@ -1221,6 +1307,8 @@
 					<div class={recording ? '' : 'hidden'}>
 						<VoiceRecording
 							bind:recording
+							transcribe={audioCapableModels.length === 0 ||
+								audioCapableModels.length !== (atSelectedModel?.id ? 1 : selectedModels.length)}
 							onCancel={async () => {
 								recording = false;
 
@@ -1228,17 +1316,26 @@
 								document.getElementById('chat-input')?.focus();
 							}}
 							onConfirm={async (data) => {
-								const { text, filename } = data;
-
 								recording = false;
-
 								await tick();
-								await insertTextAtCursor(`${text}`);
-								await tick();
-								document.getElementById('chat-input')?.focus();
 
-								if ($settings?.speechAutoSend ?? false) {
-									dispatch('submit', prompt);
+								if (data?.file) {
+									// Model supports direct audio input: attach the audio file
+									await uploadFileHandler(data.file);
+									document.getElementById('chat-input')?.focus();
+
+									if ($settings?.speechAutoSend ?? false) {
+										dispatch('submit', prompt);
+									}
+								} else {
+									const { text } = data;
+									await insertTextAtCursor(`${text}`);
+									await tick();
+									document.getElementById('chat-input')?.focus();
+
+									if ($settings?.speechAutoSend ?? false) {
+										dispatch('submit', prompt);
+									}
 								}
 							}}
 						/>

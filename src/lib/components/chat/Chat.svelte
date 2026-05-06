@@ -2163,12 +2163,19 @@
 			return fileExists;
 		});
 
+		const modelCaps = model?.info?.meta?.capabilities ?? {};
+		const modelAudioCapable = modelCaps.audio ?? false;
+		const modelVideoCapable = modelCaps.video ?? false;
+
 		let files = structuredClone(chatFiles);
 		files.push(
 			...(userMessage?.files ?? []).filter(
 				(item) =>
 					['doc', 'text', 'note', 'chat', 'collection'].includes(item.type) ||
-					(item.type === 'file' && !(item?.content_type ?? '').startsWith('image/'))
+					(item.type === 'file' &&
+						!(item?.content_type ?? '').startsWith('image/') &&
+						!(modelAudioCapable && (item?.content_type ?? '').startsWith('audio/')) &&
+						!(modelVideoCapable && (item?.content_type ?? '').startsWith('video/')))
 			)
 		);
 		// Remove duplicates
@@ -2214,28 +2221,58 @@
 				}))
 			].filter((message) => message);
 
+			const modelCaps = model?.info?.meta?.capabilities ?? {};
+			const modelVision = modelCaps.vision ?? true;
+			const modelAudio = modelCaps.audio ?? false;
+			const modelVideo = modelCaps.video ?? false;
+
 			messages = messages
 				.map((message, idx, arr) => {
+					const mediaContent: Array<{ type: string; [key: string]: unknown }> = [];
+
 					const imageFiles = (message?.files ?? []).filter(
-						(file) => file.type === 'image' || (file?.content_type ?? '').startsWith('image/')
+						(file: { type?: string; content_type?: string }) =>
+							file.type === 'image' || (file?.content_type ?? '').startsWith('image/')
 					);
+					if (modelVision) {
+						imageFiles.forEach((file: { url?: string }) => {
+							if (file.url) {
+								mediaContent.push({ type: 'image_url', image_url: { url: file.url } });
+							}
+						});
+					}
+
+					if (modelAudio) {
+						const audioFiles = (message?.files ?? []).filter(
+							(file: { content_type?: string; url?: string }) =>
+								(file?.content_type ?? '').startsWith('audio/') && file.url
+						);
+						audioFiles.forEach((file: { url: string }) => {
+							mediaContent.push({ type: 'audio_url', audio_url: { url: file.url } });
+						});
+					}
+
+					if (modelVideo) {
+						const videoFiles = (message?.files ?? []).filter(
+							(file: { content_type?: string; url?: string }) =>
+								(file?.content_type ?? '').startsWith('video/') && file.url
+						);
+						videoFiles.forEach((file: { url: string }) => {
+							mediaContent.push({ type: 'video_url', video_url: { url: file.url } });
+						});
+					}
 
 					return {
 						role: message.role,
 						...(message.output ? { output: message.output } : {}),
-						...(message.role === 'user' && imageFiles.length > 0
+						...(message.role === 'user' && mediaContent.length > 0
 							? {
 									content: [
 										{
 											type: 'text',
 											text: message?.merged?.content ?? message.content
 										},
-										...imageFiles.map((file) => ({
-											type: 'image_url',
-											image_url: {
-												url: file.url
-											}
-										}))
+										...mediaContent
 									]
 								}
 							: {
