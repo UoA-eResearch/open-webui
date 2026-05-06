@@ -21,13 +21,17 @@ from open_webui.routers.files import upload_file_handler
 from open_webui.retrieval.web.utils import validate_url
 
 import asyncio
+import logging
 import mimetypes
 import base64
 import io
 import re
+from collections import OrderedDict
 
 from open_webui.env import AIOHTTP_CLIENT_SESSION_SSL, ENABLE_IMAGE_CONTENT_TYPE_EXTENSION_FALLBACK
 from open_webui.utils.session_pool import get_session
+
+log = logging.getLogger(__name__)
 
 BASE64_IMAGE_URL_PREFIX = re.compile(r'data:image/\w+;base64,', re.IGNORECASE)
 MARKDOWN_IMAGE_URL_PATTERN = re.compile(r'!\[(.*?)\]\((.+?)\)', re.IGNORECASE)
@@ -211,3 +215,132 @@ async def get_image_base64_from_file_id(id: str) -> Optional[str]:
             return None
     except Exception as e:
         return None
+
+
+# Maximum file size allowed for base64 media encoding (50 MB).
+# Larger files are skipped to avoid event-loop blocking and oversized LLM requests.
+_MEDIA_BASE64_MAX_BYTES = 50 * 1024 * 1024
+
+# In-memory LRU cache for rendered PDF pages, keyed by (file_id, dpi, max_pages).
+# Files are immutable once uploaded, so no cache invalidation is required.
+# Limited to 128 entries to cap memory use.
+_PDF_PAGE_CACHE: OrderedDict[tuple[str, int, int], list[str]] = OrderedDict()
+_PDF_PAGE_CACHE_MAXSIZE = 128
+
+
+async def get_media_base64_from_file_id(id: str, user_id: Optional[str] = None) -> Optional[str]:
+    """Get any file as a base64 data URL (used for audio/video direct injection).
+
+    Args:
+        id: The Open WebUI file ID.
+        user_id: When provided, only the file's owner can retrieve it.
+            Pass ``None`` to skip the ownership check (e.g., admin paths).
+    """
+    if user_id is not None:
+        file = await Files.get_file_by_id_and_user_id(id, user_id)
+    else:
+        file = await Files.get_file_by_id(id)
+    if not file:
+        return None
+
+    try:
+        file_path = await asyncio.to_thread(Storage.get_file, file.path)
+        file_path = Path(file_path)
+
+        if not file_path.is_file():
+            return None
+
+        file_size = file_path.stat().st_size
+        if file_size > _MEDIA_BASE64_MAX_BYTES:
+            log.warning(
+                f'File {id} is {file_size} bytes, exceeds {_MEDIA_BASE64_MAX_BYTES}-byte '
+                'limit for base64 media encoding; skipping.'
+            )
+            return None
+
+        def _read_and_encode():
+            with open(file_path, 'rb') as f:
+                return base64.b64encode(f.read()).decode('utf-8')
+
+        encoded_string = await asyncio.to_thread(_read_and_encode)
+        content_type = (file.meta or {}).get('content_type') or mimetypes.guess_type(file_path.name)[0]
+        if not content_type:
+            return None
+        return f'data:{content_type};base64,{encoded_string}'
+    except Exception:
+        return None
+
+
+async def get_pdf_page_images(
+    file_id: str, dpi: int = 150, max_pages: int = 50, user_id: Optional[str] = None
+) -> list[str]:
+    """Render PDF pages as base64 PNG data URLs using pymupdf (fitz).
+
+    Each returned string is a ``data:image/png;base64,...`` data URL suitable
+    for use as an ``image_url`` content item in an OpenAI-compatible request.
+
+    Results are cached in memory (keyed by ``(file_id, dpi, max_pages)``) so
+    that repeated requests for the same PDF (e.g., reloading a chat) do not
+    re-render on every call.
+
+    Args:
+        file_id: The Open WebUI file ID (UUID string).
+        dpi: Resolution used for rendering (default 150 DPI).
+        max_pages: Maximum number of pages to render.  Defaults to 50.
+            Set to 0 to render all pages with no limit.
+        user_id: When provided, only the file's owner can retrieve it.
+    """
+    cache_key = (file_id, dpi, max_pages)
+    if cache_key in _PDF_PAGE_CACHE:
+        # Move accessed entry to the end (most-recently-used position).
+        _PDF_PAGE_CACHE.move_to_end(cache_key)
+        return _PDF_PAGE_CACHE[cache_key]
+
+    try:
+        import fitz  # pymupdf
+    except ImportError:
+        log.warning('pymupdf is not installed; cannot render PDF pages as images. Install it with: pip install pymupdf')
+        return []
+
+    if user_id is not None:
+        file = await Files.get_file_by_id_and_user_id(file_id, user_id)
+    else:
+        file = await Files.get_file_by_id(file_id)
+    if not file:
+        return []
+
+    try:
+        file_path = await asyncio.to_thread(Storage.get_file, file.path)
+        file_path = Path(file_path)
+
+        if not file_path.is_file():
+            return []
+
+        zoom = dpi / 72.0
+        matrix = fitz.Matrix(zoom, zoom)
+
+        def _render_pages():
+            doc = fitz.open(str(file_path))
+            try:
+                n = len(doc)
+                limit = n if (max_pages <= 0) else min(n, max_pages)
+                pages = []
+                for i in range(limit):
+                    pix = doc.load_page(i).get_pixmap(matrix=matrix)
+                    img_bytes = pix.tobytes('png')
+                    b64 = base64.b64encode(img_bytes).decode('utf-8')
+                    pages.append(f'data:image/png;base64,{b64}')
+                return pages
+            finally:
+                doc.close()
+
+        pages = await asyncio.to_thread(_render_pages)
+
+        # Populate cache; evict the least-recently-used entry when full.
+        if len(_PDF_PAGE_CACHE) >= _PDF_PAGE_CACHE_MAXSIZE:
+            _PDF_PAGE_CACHE.popitem(last=False)  # evict oldest (LRU) entry
+        _PDF_PAGE_CACHE[cache_key] = pages
+        return pages
+    except Exception as e:
+        log.error(f'Error rendering PDF pages for file {file_id}: {e}')
+        return []

@@ -247,6 +247,10 @@ def get_rf(
 router = APIRouter()
 
 
+class EmptyContentError(ValueError):
+    """Raised when a file/document has no extractable text content."""
+
+
 class CollectionNameForm(BaseModel):
     collection_name: Optional[str] = None
 
@@ -1450,7 +1454,7 @@ def save_docs_to_vector_db(
             raise ValueError(ERROR_MESSAGES.DEFAULT('Invalid text splitter'))
 
     if len(docs) == 0:
-        raise ValueError(ERROR_MESSAGES.EMPTY_CONTENT)
+        raise EmptyContentError(ERROR_MESSAGES.EMPTY_CONTENT)
 
     texts = [sanitize_text_for_db(doc.page_content) for doc in docs]
     metadatas = [
@@ -1746,6 +1750,34 @@ async def process_file(
                     raise e
 
         except Exception as e:
+            # If the only issue is that the file has no extractable text (e.g., an
+            # image-only PDF), the raw binary is still valid.  Vision-capable models
+            # can render it via get_pdf_page_images.  Mark as completed rather than
+            # failed so the frontend doesn't show an error and the file remains usable.
+            if isinstance(e, EmptyContentError):
+                log.warning(
+                    f'File {file.id} ({file.filename!r}) yielded no text; '
+                    'storing as-is so vision-capable models can render it.'
+                )
+                async with get_async_db() as session:
+                    await Files.update_file_data_by_id(
+                        file.id,
+                        {'status': 'completed'},
+                        db=session,
+                    )
+                # Return an empty-content result so callers treat this as a
+                # successful (no-op) processing step rather than an error.
+                # collection_name is None because the file was NOT saved to the
+                # vector DB (no text to embed); 'content' is empty for the same
+                # reason. The raw binary remains in Storage and is accessible for
+                # direct rendering by vision-capable models (e.g. get_pdf_page_images).
+                return {
+                    'status': True,
+                    'collection_name': None,  # not saved to vector DB
+                    'filename': file.filename,
+                    'content': '',
+                }
+
             log.exception(e)
             # Fresh session for error status update.
             async with get_async_db() as session:
