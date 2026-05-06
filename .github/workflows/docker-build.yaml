@@ -8,7 +8,6 @@ on:
       - dev
     tags:
       - v*
-  pull_request:
 
 env:
   REGISTRY: ghcr.io
@@ -16,8 +15,6 @@ env:
 jobs:
   build-main-image:
     runs-on: ${{ matrix.runner }}
-    # Skip forks: PR events from a forked repo lack package write permission.
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     permissions:
       contents: read
       packages: write
@@ -82,7 +79,6 @@ jobs:
           images: ${{ env.FULL_IMAGE_NAME }}
           tags: |
             type=ref,event=branch
-            type=ref,event=pr
             ${{ github.ref_type == 'tag' && 'type=raw,value=main' || '' }}
           flavor: |
             prefix=cache-${{ matrix.platform }}-
@@ -93,25 +89,23 @@ jobs:
         id: build
         with:
           context: .
-          push: ${{ github.event_name != 'pull_request' }}
+          push: true
           platforms: ${{ matrix.platform }}
           labels: ${{ steps.meta.outputs.labels }}
-          outputs: ${{ github.event_name != 'pull_request' && format('type=image,name={0},push-by-digest=true,name-canonical=true,push=true', env.FULL_IMAGE_NAME) || 'type=cacheonly' }}
+          outputs: type=image,name=${{ env.FULL_IMAGE_NAME }},push-by-digest=true,name-canonical=true,push=true
           cache-from: type=registry,ref=${{ steps.cache-meta.outputs.tags }}
           cache-to: type=registry,ref=${{ steps.cache-meta.outputs.tags }},mode=max
-          sbom: ${{ github.event_name != 'pull_request' }}
+          sbom: true
           build-args: |
             BUILD_HASH=${{ github.sha }}
 
       - name: Export digest
-        if: github.event_name != 'pull_request'
         run: |
           mkdir -p /tmp/digests
           digest="${{ steps.build.outputs.digest }}"
           touch "/tmp/digests/${digest#sha256:}"
 
       - name: Upload digest
-        if: github.event_name != 'pull_request'
         uses: actions/upload-artifact@v4
         with:
           name: digests-main-${{ env.PLATFORM_PAIR }}
@@ -121,8 +115,6 @@ jobs:
 
   build-cuda-image:
     runs-on: ${{ matrix.runner }}
-    # Skip forks: PR events from a forked repo lack package write permission.
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     permissions:
       contents: read
       packages: write
@@ -192,7 +184,6 @@ jobs:
           images: ${{ env.FULL_IMAGE_NAME }}
           tags: |
             type=ref,event=branch
-            type=ref,event=pr
             ${{ github.ref_type == 'tag' && 'type=raw,value=main' || '' }}
           flavor: |
             prefix=cache-cuda-${{ matrix.platform }}-
@@ -203,26 +194,24 @@ jobs:
         id: build
         with:
           context: .
-          push: ${{ github.event_name != 'pull_request' }}
+          push: true
           platforms: ${{ matrix.platform }}
           labels: ${{ steps.meta.outputs.labels }}
-          outputs: ${{ github.event_name != 'pull_request' && format('type=image,name={0},push-by-digest=true,name-canonical=true,push=true', env.FULL_IMAGE_NAME) || 'type=cacheonly' }}
+          outputs: type=image,name=${{ env.FULL_IMAGE_NAME }},push-by-digest=true,name-canonical=true,push=true
           cache-from: type=registry,ref=${{ steps.cache-meta.outputs.tags }}
           cache-to: type=registry,ref=${{ steps.cache-meta.outputs.tags }},mode=max
-          sbom: ${{ github.event_name != 'pull_request' }}
+          sbom: true
           build-args: |
             BUILD_HASH=${{ github.sha }}
             USE_CUDA=true
 
       - name: Export digest
-        if: github.event_name != 'pull_request'
         run: |
           mkdir -p /tmp/digests
           digest="${{ steps.build.outputs.digest }}"
           touch "/tmp/digests/${digest#sha256:}"
 
       - name: Upload digest
-        if: github.event_name != 'pull_request'
         uses: actions/upload-artifact@v4
         with:
           name: digests-cuda-${{ env.PLATFORM_PAIR }}
@@ -232,8 +221,6 @@ jobs:
 
   build-cuda126-image:
     runs-on: ${{ matrix.runner }}
-    # Skip forks: PR events from a forked repo lack package write permission.
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     permissions:
       contents: read
       packages: write
@@ -303,7 +290,6 @@ jobs:
           images: ${{ env.FULL_IMAGE_NAME }}
           tags: |
             type=ref,event=branch
-            type=ref,event=pr
             ${{ github.ref_type == 'tag' && 'type=raw,value=main' || '' }}
           flavor: |
             prefix=cache-cuda126-${{ matrix.platform }}-
@@ -314,27 +300,25 @@ jobs:
         id: build
         with:
           context: .
-          push: ${{ github.event_name != 'pull_request' }}
+          push: true
           platforms: ${{ matrix.platform }}
           labels: ${{ steps.meta.outputs.labels }}
-          outputs: ${{ github.event_name != 'pull_request' && format('type=image,name={0},push-by-digest=true,name-canonical=true,push=true', env.FULL_IMAGE_NAME) || 'type=cacheonly' }}
+          outputs: type=image,name=${{ env.FULL_IMAGE_NAME }},push-by-digest=true,name-canonical=true,push=true
           cache-from: type=registry,ref=${{ steps.cache-meta.outputs.tags }}
           cache-to: type=registry,ref=${{ steps.cache-meta.outputs.tags }},mode=max
-          sbom: ${{ github.event_name != 'pull_request' }}
+          sbom: true
           build-args: |
             BUILD_HASH=${{ github.sha }}
             USE_CUDA=true
             USE_CUDA_VER=cu126
 
       - name: Export digest
-        if: github.event_name != 'pull_request'
         run: |
           mkdir -p /tmp/digests
           digest="${{ steps.build.outputs.digest }}"
           touch "/tmp/digests/${digest#sha256:}"
 
       - name: Upload digest
-        if: github.event_name != 'pull_request'
         uses: actions/upload-artifact@v4
         with:
           name: digests-cuda126-${{ env.PLATFORM_PAIR }}
@@ -344,8 +328,6 @@ jobs:
 
   build-ollama-image:
     runs-on: ${{ matrix.runner }}
-    # Skip forks: PR events from a forked repo lack package write permission.
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     permissions:
       contents: read
       packages: write
@@ -412,7 +394,6 @@ jobs:
           images: ${{ env.FULL_IMAGE_NAME }}
           tags: |
             type=ref,event=branch
-            type=ref,event=pr
             ${{ github.ref_type == 'tag' && 'type=raw,value=main' || '' }}
           flavor: |
             prefix=cache-ollama-${{ matrix.platform }}-
@@ -423,26 +404,24 @@ jobs:
         id: build
         with:
           context: .
-          push: ${{ github.event_name != 'pull_request' }}
+          push: true
           platforms: ${{ matrix.platform }}
           labels: ${{ steps.meta.outputs.labels }}
-          outputs: ${{ github.event_name != 'pull_request' && format('type=image,name={0},push-by-digest=true,name-canonical=true,push=true', env.FULL_IMAGE_NAME) || 'type=cacheonly' }}
+          outputs: type=image,name=${{ env.FULL_IMAGE_NAME }},push-by-digest=true,name-canonical=true,push=true
           cache-from: type=registry,ref=${{ steps.cache-meta.outputs.tags }}
           cache-to: type=registry,ref=${{ steps.cache-meta.outputs.tags }},mode=max
-          sbom: ${{ github.event_name != 'pull_request' }}
+          sbom: true
           build-args: |
             BUILD_HASH=${{ github.sha }}
             USE_OLLAMA=true
 
       - name: Export digest
-        if: github.event_name != 'pull_request'
         run: |
           mkdir -p /tmp/digests
           digest="${{ steps.build.outputs.digest }}"
           touch "/tmp/digests/${digest#sha256:}"
 
       - name: Upload digest
-        if: github.event_name != 'pull_request'
         uses: actions/upload-artifact@v4
         with:
           name: digests-ollama-${{ env.PLATFORM_PAIR }}
@@ -452,8 +431,6 @@ jobs:
 
   build-slim-image:
     runs-on: ${{ matrix.runner }}
-    # Skip forks: PR events from a forked repo lack package write permission.
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     permissions:
       contents: read
       packages: write
@@ -520,7 +497,6 @@ jobs:
           images: ${{ env.FULL_IMAGE_NAME }}
           tags: |
             type=ref,event=branch
-            type=ref,event=pr
             ${{ github.ref_type == 'tag' && 'type=raw,value=main' || '' }}
           flavor: |
             prefix=cache-slim-${{ matrix.platform }}-
@@ -531,26 +507,24 @@ jobs:
         id: build
         with:
           context: .
-          push: ${{ github.event_name != 'pull_request' }}
+          push: true
           platforms: ${{ matrix.platform }}
           labels: ${{ steps.meta.outputs.labels }}
-          outputs: ${{ github.event_name != 'pull_request' && format('type=image,name={0},push-by-digest=true,name-canonical=true,push=true', env.FULL_IMAGE_NAME) || 'type=cacheonly' }}
+          outputs: type=image,name=${{ env.FULL_IMAGE_NAME }},push-by-digest=true,name-canonical=true,push=true
           cache-from: type=registry,ref=${{ steps.cache-meta.outputs.tags }}
           cache-to: type=registry,ref=${{ steps.cache-meta.outputs.tags }},mode=max
-          sbom: ${{ github.event_name != 'pull_request' }}
+          sbom: true
           build-args: |
             BUILD_HASH=${{ github.sha }}
             USE_SLIM=true
 
       - name: Export digest
-        if: github.event_name != 'pull_request'
         run: |
           mkdir -p /tmp/digests
           digest="${{ steps.build.outputs.digest }}"
           touch "/tmp/digests/${digest#sha256:}"
 
       - name: Upload digest
-        if: github.event_name != 'pull_request'
         uses: actions/upload-artifact@v4
         with:
           name: digests-slim-${{ env.PLATFORM_PAIR }}
@@ -560,7 +534,6 @@ jobs:
 
   merge-main-images:
     runs-on: ubuntu-latest
-    if: github.event_name != 'pull_request'
     needs: [build-main-image]
     steps:
       # GitHub Packages requires the entire repository name to be in lowercase
@@ -615,7 +588,6 @@ jobs:
 
   merge-cuda-images:
     runs-on: ubuntu-latest
-    if: github.event_name != 'pull_request'
     needs: [build-cuda-image]
     steps:
       # GitHub Packages requires the entire repository name to be in lowercase
@@ -672,7 +644,6 @@ jobs:
 
   merge-cuda126-images:
     runs-on: ubuntu-latest
-    if: github.event_name != 'pull_request'
     needs: [build-cuda126-image]
     steps:
       # GitHub Packages requires the entire repository name to be in lowercase
@@ -729,7 +700,6 @@ jobs:
 
   merge-ollama-images:
     runs-on: ubuntu-latest
-    if: github.event_name != 'pull_request'
     needs: [build-ollama-image]
     steps:
       # GitHub Packages requires the entire repository name to be in lowercase
@@ -786,7 +756,6 @@ jobs:
 
   merge-slim-images:
     runs-on: ubuntu-latest
-    if: github.event_name != 'pull_request'
     needs: [build-slim-image]
     steps:
       # GitHub Packages requires the entire repository name to be in lowercase
