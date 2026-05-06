@@ -112,13 +112,16 @@ async def get_image_url_from_base64(request, base64_image_string, metadata, user
 
 async def convert_markdown_base64_images(request, content: str, metadata, user):
     MIN_REPLACEMENT_URL_LENGTH = 1024
+    # 20 MB of base64 chars decodes to ~15 MB of binary data (base64 is ~4/3 overhead);
+    # cap to avoid excessive memory/disk usage from very large data URIs.
+    MAX_REPLACEMENT_URL_LENGTH = 20 * 1024 * 1024
     result_parts = []
     last_end = 0
 
     for match in MARKDOWN_IMAGE_URL_PATTERN.finditer(content):
         result_parts.append(content[last_end : match.start()])
         base64_string = match.group(2)
-        if len(base64_string) > MIN_REPLACEMENT_URL_LENGTH:
+        if MIN_REPLACEMENT_URL_LENGTH < len(base64_string) <= MAX_REPLACEMENT_URL_LENGTH:
             url = await get_image_url_from_base64(request, base64_string, metadata, user)
             if url:
                 result_parts.append(f'![{match.group(1)}]({url})')

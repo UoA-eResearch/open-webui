@@ -4457,20 +4457,46 @@ async def streaming_chat_response_handler(response, ctx):
                     # message text to server-side URLs. The per-chunk conversion above
                     # only handles images that fit within a single streaming chunk; this
                     # step catches large images (e.g. plots) that span many chunks.
+                    converted_any_image = False
                     if ENABLE_CHAT_RESPONSE_BASE64_IMAGE_URL_CONVERSION and output:
                         for item in output:
                             if item.get('type') == 'message':
                                 for content_part in item.get('content', []):
-                                    if content_part.get('type') == 'output_text' and content_part.get('text'):
-                                        content_part['text'] = await convert_markdown_base64_images(
+                                    part_type = content_part.get('type')
+                                    text = content_part.get('text') if part_type == 'output_text' else None
+                                    # Cheap guard: skip conversion when there is no base64 image pattern
+                                    if text and 'data:image' in text and 'base64,' in text and '![' in text:
+                                        converted = await convert_markdown_base64_images(
                                             request,
-                                            content_part['text'],
+                                            text,
                                             {
                                                 'chat_id': metadata.get('chat_id', None),
                                                 'message_id': metadata.get('message_id', None),
                                             },
                                             user,
                                         )
+                                        if converted != text:
+                                            content_part['text'] = converted
+                                            converted_any_image = True
+
+                    if converted_any_image:
+                        # Update the accumulated content string so webhook payloads and
+                        # other downstream consumers see the converted URLs, not the raw
+                        # data URIs (which can be hundreds of KB per image).
+                        content = serialize_output(output)
+
+                        if ENABLE_REALTIME_CHAT_SAVE:
+                            # When realtime save is on the message was already persisted
+                            # chunk-by-chunk with unconverted base64. Write the converted
+                            # output back to the DB now.
+                            await Chats.upsert_message_to_chat_by_id_and_message_id(
+                                metadata['chat_id'],
+                                metadata['message_id'],
+                                {
+                                    'content': content,
+                                    'output': output,
+                                },
+                            )
 
                     if response_tool_calls:
                         tool_calls.append(_split_tool_calls(response_tool_calls))
