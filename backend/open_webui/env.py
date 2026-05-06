@@ -677,7 +677,7 @@ else:
 ####################################
 
 ENABLE_CHAT_RESPONSE_BASE64_IMAGE_URL_CONVERSION = (
-    os.environ.get('ENABLE_CHAT_RESPONSE_BASE64_IMAGE_URL_CONVERSION', 'False').lower() == 'true'
+    os.environ.get('ENABLE_CHAT_RESPONSE_BASE64_IMAGE_URL_CONVERSION', 'True').lower() == 'true'
 )
 
 # When enabled, uses a hardcoded extension-to-MIME dictionary as a last-resort

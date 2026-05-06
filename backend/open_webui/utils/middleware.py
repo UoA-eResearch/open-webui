@@ -4453,6 +4453,25 @@ async def streaming_chat_response_handler(response, ctx):
                                 )
                                 reasoning_item['status'] = 'completed'
 
+                    # Post-streaming: convert any remaining base64 image data URIs in
+                    # message text to server-side URLs. The per-chunk conversion above
+                    # only handles images that fit within a single streaming chunk; this
+                    # step catches large images (e.g. plots) that span many chunks.
+                    if ENABLE_CHAT_RESPONSE_BASE64_IMAGE_URL_CONVERSION and output:
+                        for item in output:
+                            if item.get('type') == 'message':
+                                for content_part in item.get('content', []):
+                                    if content_part.get('type') == 'output_text' and content_part.get('text'):
+                                        content_part['text'] = await convert_markdown_base64_images(
+                                            request,
+                                            content_part['text'],
+                                            {
+                                                'chat_id': metadata.get('chat_id', None),
+                                                'message_id': metadata.get('message_id', None),
+                                            },
+                                            user,
+                                        )
+
                     if response_tool_calls:
                         tool_calls.append(_split_tool_calls(response_tool_calls))
 
