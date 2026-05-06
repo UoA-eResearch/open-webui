@@ -1308,8 +1308,7 @@
 						<VoiceRecording
 							bind:recording
 							transcribe={audioCapableModels.length === 0 ||
-							audioCapableModels.length !==
-								(atSelectedModel?.id ? 1 : selectedModels.length)}
+								audioCapableModels.length !== (atSelectedModel?.id ? 1 : selectedModels.length)}
 							onCancel={async () => {
 								recording = false;
 

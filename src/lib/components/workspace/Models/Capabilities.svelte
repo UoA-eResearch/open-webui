@@ -13,7 +13,9 @@
 		},
 		audio: {
 			label: $i18n.t('Audio'),
-			description: $i18n.t('Model accepts audio inputs directly (bypasses speech-to-text transcription)')
+			description: $i18n.t(
+				'Model accepts audio inputs directly (bypasses speech-to-text transcription)'
+			)
 		},
 		video: {
 			label: $i18n.t('Video'),
@@ -85,7 +87,10 @@
 
 	// Hide file_context/audio/video when file_upload is disabled
 	$: visibleCapabilities = Object.keys(capabilityLabels).filter((cap) => {
-		if ((cap === 'file_context' || cap === 'audio' || cap === 'video') && !capabilities.file_upload) {
+		if (
+			(cap === 'file_context' || cap === 'audio' || cap === 'video') &&
+			!capabilities.file_upload
+		) {
 			return false;
 		}
 		return true;
