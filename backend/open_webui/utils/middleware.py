@@ -2153,6 +2153,23 @@ async def convert_url_images_to_base64(form_data):
 
 async def convert_url_media_to_base64(form_data, user_id: Optional[str] = None):
     """Convert audio_url and video_url content items that reference file IDs into base64 data URLs."""
+
+    def normalize_base64_media_data_url(url: str) -> str:
+        if not isinstance(url, str) or not url.startswith('data:'):
+            return url
+        if ',' not in url:
+            return url
+
+        header, payload = url.split(',', 1)
+        if ';base64' not in header.lower():
+            return url
+
+        media_type = header[5:].split(';', 1)[0].strip().lower()
+        if not media_type:
+            return url
+
+        return f'data:{media_type};base64,{payload}'
+
     messages = form_data.get('messages', [])
 
     for message in messages:
@@ -2171,22 +2188,32 @@ async def convert_url_media_to_base64(form_data, user_id: Optional[str] = None):
 
             if item_type == 'audio_url':
                 url = item.get('audio_url', {}).get('url', '')
-                if url and not url.startswith('data:') and not url.startswith('http'):
+                if url and url.startswith('data:'):
+                    item = {'type': 'audio_url', 'audio_url': {'url': normalize_base64_media_data_url(url)}}
+                elif url and not url.startswith('http'):
                     try:
                         base64_data = await get_media_base64_from_file_id(url, user_id=user_id)
                         if base64_data:
-                            item = {'type': 'audio_url', 'audio_url': {'url': base64_data}}
+                            item = {
+                                'type': 'audio_url',
+                                'audio_url': {'url': normalize_base64_media_data_url(base64_data)},
+                            }
                     except Exception as e:
                         log.debug(f'Error converting audio URL to base64: {e}')
                 new_content.append(item)
 
             elif item_type == 'video_url':
                 url = item.get('video_url', {}).get('url', '')
-                if url and not url.startswith('data:') and not url.startswith('http'):
+                if url and url.startswith('data:'):
+                    item = {'type': 'video_url', 'video_url': {'url': normalize_base64_media_data_url(url)}}
+                elif url and not url.startswith('http'):
                     try:
                         base64_data = await get_media_base64_from_file_id(url, user_id=user_id)
                         if base64_data:
-                            item = {'type': 'video_url', 'video_url': {'url': base64_data}}
+                            item = {
+                                'type': 'video_url',
+                                'video_url': {'url': normalize_base64_media_data_url(base64_data)},
+                            }
                     except Exception as e:
                         log.debug(f'Error converting video URL to base64: {e}')
                 new_content.append(item)
