@@ -2155,16 +2155,18 @@ async def convert_url_media_to_base64(form_data, user_id: Optional[str] = None):
     """Convert audio_url and video_url content items that reference file IDs into base64 data URLs."""
 
     def normalize_base64_media_data_url(url: str) -> str:
+        data_prefix = 'data:'
         if not isinstance(url, str) or not url.startswith('data:'):
             return url
         if ',' not in url:
             return url
 
         header, payload = url.split(',', 1)
-        if ';base64' not in header.lower():
+        header_lower = header.lower()
+        if ';base64' not in header_lower:
             return url
 
-        media_type = header[5:].split(';', 1)[0].strip().lower()
+        media_type = header.removeprefix(data_prefix).split(';', 1)[0].strip().lower()
         if not media_type:
             return url
 
