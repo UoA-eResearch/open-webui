@@ -228,6 +228,15 @@ _PDF_PAGE_CACHE: OrderedDict[tuple[str, int, int], list[str]] = OrderedDict()
 _PDF_PAGE_CACHE_MAXSIZE = 128
 
 
+def _normalize_mime_type(content_type: Optional[str]) -> Optional[str]:
+    if not content_type:
+        return None
+
+    # Keep only media type/subtype (drop parameters like codecs/charset).
+    normalized = content_type.split(';', 1)[0].strip().lower()
+    return normalized or None
+
+
 async def get_media_base64_from_file_id(id: str, user_id: Optional[str] = None) -> Optional[str]:
     """Get any file as a base64 data URL (used for audio/video direct injection).
 
@@ -263,7 +272,9 @@ async def get_media_base64_from_file_id(id: str, user_id: Optional[str] = None) 
                 return base64.b64encode(f.read()).decode('utf-8')
 
         encoded_string = await asyncio.to_thread(_read_and_encode)
-        content_type = (file.meta or {}).get('content_type') or mimetypes.guess_type(file_path.name)[0]
+        content_type = _normalize_mime_type((file.meta or {}).get('content_type')) or _normalize_mime_type(
+            mimetypes.guess_type(file_path.name)[0]
+        )
         if not content_type:
             return None
         return f'data:{content_type};base64,{encoded_string}'
