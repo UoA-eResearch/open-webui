@@ -2352,6 +2352,7 @@
 					...params,
 					stop: getStopTokens()
 				},
+        		mm_processor_kwargs: {use_audio_in_video: true},
 
 				files: (files?.length ?? 0) > 0 ? files : undefined,
 
